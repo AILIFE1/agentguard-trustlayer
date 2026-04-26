@@ -1,0 +1,1 @@
+# TrustLayer has no third-party dependencies — standard library only.
