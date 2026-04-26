@@ -2,6 +2,8 @@
 
 A deterministic validation layer for AI and autonomous systems.
 
+Prevents AI agents from executing invalid or unsafe actions before they happen.
+
 ---
 
 ## Why this exists
@@ -51,6 +53,26 @@ Every update passes through four gates:
 2. **Locks** — is the target key frozen?
 3. **Constraints** — does the resulting state pass all rules?
 4. **Rollback** — if anything fails, state is fully restored
+
+---
+
+## Example: Preventing Bad AI Actions
+
+An AI agent attempts to set:
+
+```
+C = 100
+```
+
+But the system enforces:
+
+```
+C = B + 5
+```
+
+TrustLayer rejects the action before it can corrupt the system.
+
+The agent retries with a valid update, and the system remains stable.
 
 ---
 
@@ -123,12 +145,12 @@ asyncio.run(main())
 
 ---
 
-## Use Cases
+## Practical Use Cases
 
-- AI agents that must follow strict domain rules
-- Automated systems with hard invariants
-- Safe execution layers for LLM workflows
-- Multi-agent systems with authority control
+- Prevent AI agents from breaking business rules
+- Enforce invariants in automated systems
+- Add safety layer to LLM workflows
+- Control multi-agent environments with authority
 
 ---
 

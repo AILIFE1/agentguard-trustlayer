@@ -101,28 +101,33 @@ class StorytellerCathedral(Cathedral):
             proposal = await self.agent.propose(goal)
             action = parse_action(proposal)
 
+            print(f"\n--- Agent Attempt {attempt} ---")
+
             if not action:
-                print(f"  Attempt {attempt}: unparseable proposal")
+                print("Goal: (unparseable proposal)")
                 last_event = ValidationEvent(
                     success=False,
                     description=goal,
                     failed_constraint="unparseable proposal",
                 )
+                print("REJECTED: Could not parse agent output")
+                print("System prevented invalid state.")
             else:
-                value_display = f"{action.target} = {action.value}"
-                print(f"  Attempt {attempt}: Setting {value_display}")
+                print(f"Goal: Force {action.target} = {action.value}")
 
                 update = Update(description=goal, actions=[action], token=token)
                 last_event = self.validator.validate_update(update)
 
                 if last_event.success:
-                    print(f"  ACCEPTED\n")
+                    print("ACCEPTED: State remains consistent")
+                    print(f"Final State: {self.validator.state.values}")
                     return last_event
                 else:
-                    print(f"  REJECTED: breaks constraint  {last_event.failed_constraint}\n")
+                    print(f"REJECTED: Would break constraint ({last_event.failed_constraint})")
+                    print("System prevented invalid state.")
 
             if attempt < self.retry.max_attempts:
-                print("  Retrying...\n")
+                print("\nAdjusting strategy...")
                 await asyncio.sleep(delay)
                 delay *= self.retry.backoff_factor
 
@@ -151,21 +156,16 @@ async def main() -> None:
     header("TrustLayer v2.0  --  Validation Demo")
 
     print()
-    print("  Rule:  C must always equal B + 5")
-    print("  Agent: will first break the rule, then fix it")
+    print("  Rule:   C must always equal B + 5")
+    print("  Agent:  will first break the rule, then fix it")
 
     show_state(state)
-    rule()
-    print()
 
     event = await cathedral.step("update C", token)
 
-    rule()
-    show_state(state)
-
-    status = "PASSED" if event.success else "FAILED"
-    print(f"  Result: {status}")
     print()
+    status = "PASSED" if event.success else "FAILED"
+    print(f"\n[ Result: {status} ]")
     print("=" * W)
     print()
 
