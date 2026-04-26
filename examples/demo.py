@@ -20,7 +20,12 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# Ensure emoji render correctly on all terminals
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 import logging
+logging.basicConfig(level=logging.INFO)
 logging.disable(logging.CRITICAL)   # silence internal logs for clean demo output
 
 from trustlayer import (
@@ -119,11 +124,11 @@ class StorytellerCathedral(Cathedral):
                 last_event = self.validator.validate_update(update)
 
                 if last_event.success:
-                    print("ACCEPTED: State remains consistent")
+                    print("✅ ACCEPTED: State remains consistent")
                     print(f"Final State: {self.validator.state.values}")
                     return last_event
                 else:
-                    print(f"REJECTED: Would break constraint ({last_event.failed_constraint})")
+                    print(f"❌ REJECTED: Would break constraint ({last_event.failed_constraint})")
                     print("System prevented invalid state.")
 
             if attempt < self.retry.max_attempts:

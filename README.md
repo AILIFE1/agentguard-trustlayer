@@ -1,7 +1,5 @@
 # TrustLayer
 
-A deterministic validation layer for AI and autonomous systems.
-
 Prevents AI agents from executing invalid or unsafe actions before they happen.
 
 ---
@@ -17,7 +15,7 @@ Without a validation layer:
 - corrupt system state
 - execute invalid operations
 
-TrustLayer sits between the AI and execution.
+TrustLayer sits between AI and execution.
 
 It ensures:
 - every action is checked
@@ -34,8 +32,6 @@ TrustLayer separates:
 from
 **execution (validated system)**
 
-The agent proposes. TrustLayer decides if it's allowed.
-
 ---
 
 ## How it works
@@ -44,21 +40,20 @@ The agent proposes. TrustLayer decides if it's allowed.
 AI Agent  -->  Proposal  -->  TrustLayer  -->  Execution
                                    ^
                               Constraints
-                           (rules you define)
 ```
 
 Every update passes through four gates:
 
 1. **Auth** — is the token valid and unexpired?
 2. **Locks** — is the target key frozen?
-3. **Constraints** — does the resulting state pass all rules?
+3. **Constraints** — does the new state pass all rules?
 4. **Rollback** — if anything fails, state is fully restored
 
 ---
 
 ## Example: Preventing Bad AI Actions
 
-An AI agent attempts to set:
+An AI agent attempts:
 
 ```
 C = 100
@@ -82,9 +77,18 @@ The agent retries with a valid update, and the system remains stable.
 - Authenticated authority (HMAC-signed tokens with TTL)
 - Safe state updates with automatic rollback
 - Composable logic (`&`, `|`, `~` operators)
-- Async agent loop with configurable retry + backoff
+- Async agent loop with retry and backoff
 - Full audit trail via `ValidationEvent`
 - Zero dependencies (standard library only)
+
+---
+
+## Practical Use Cases
+
+- Prevent AI agents from breaking business rules
+- Enforce invariants in automated systems
+- Add safety layer to LLM workflows
+- Control multi-agent environments with authority
 
 ---
 
@@ -99,17 +103,15 @@ python examples/demo.py
 ## Example Output
 
 ```
-[ State ]  A=10  B=20  C=10
+--- Agent Attempt 1 ---
+Goal: Force C = 100
+REJECTED: Would break constraint (C must equal B + 5)
+System prevented invalid state.
 
-Attempt 1: Setting C = 100
-REJECTED: breaks constraint  C must equal B + 5
-
-Retrying...
-
-Attempt 2: Setting C = 25
-ACCEPTED
-
-[ State ]  A=10  B=20  C=25
+--- Agent Attempt 2 ---
+Adjusting strategy...
+ACCEPTED: State remains consistent
+Final State: {'A': 10, 'B': 20, 'C': 25}
 ```
 
 ---
@@ -142,15 +144,6 @@ async def main():
 
 asyncio.run(main())
 ```
-
----
-
-## Practical Use Cases
-
-- Prevent AI agents from breaking business rules
-- Enforce invariants in automated systems
-- Add safety layer to LLM workflows
-- Control multi-agent environments with authority
 
 ---
 
