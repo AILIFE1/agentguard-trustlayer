@@ -1,10 +1,14 @@
 """
 TrustLayer demo  --  python examples/demo.py
 
-Walk-through:
-  1. Agent proposes an invalid update  -> REJECTED
-  2. Agent retries with a valid update -> ACCEPTED
-  3. State reflects the accepted change
+Story:
+  An agent manages a small system with three values: A, B, and C.
+  One hard rule exists: C must always equal B + 5.
+
+  The agent first tries to set C = 100 (breaks the rule).
+  TrustLayer rejects it and rolls back state.
+  The agent retries with C = 25 (correct).
+  TrustLayer accepts it.
 """
 
 from __future__ import annotations
@@ -16,6 +20,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import logging
+logging.disable(logging.CRITICAL)   # silence internal logs for clean demo output
+
 from trustlayer import (
     Action,
     Agent,
@@ -26,26 +33,20 @@ from trustlayer import (
     RetryConfig,
     State,
     Update,
-    Validator,
     ValidationEvent,
+    Validator,
 )
+from trustlayer.engine import parse_action
 
 SECRET = b"demo-secret"
 
 # ---------------------------------------------------------------------------
-# Constraints
+# Constraint:  C must equal B + 5
 # ---------------------------------------------------------------------------
 
-score_in_range = LambdaConstraint(
-    "score_in_range",
-    lambda v: 0 <= v.get("score", 0) <= 100,
-    priority=10,
-)
-
-mode_not_restricted = LambdaConstraint(
-    "mode_not_restricted",
-    lambda v: v.get("mode") != "restricted",
-    priority=20,
+c_equals_b_plus_5 = LambdaConstraint(
+    "C must equal B + 5",
+    lambda v: v.get("C", 0) == v.get("B", 0) + 5,
 )
 
 # ---------------------------------------------------------------------------
@@ -59,43 +60,69 @@ async def mock_model(prompt: str) -> str:
     global _call
     _call += 1
     if _call == 1:
-        return json.dumps({"type": "update", "target": "score", "value": 9999})
-    return json.dumps({"type": "update", "target": "score", "value": 42})
+        return json.dumps({"type": "update", "target": "C", "value": 100})
+    return json.dumps({"type": "update", "target": "C", "value": 25})
 
 
 # ---------------------------------------------------------------------------
-# Custom Cathedral subclass that prints REJECTED / RETRYING / ACCEPTED
+# Display helpers
 # ---------------------------------------------------------------------------
 
-class LoggingCathedral(Cathedral):
+W = 50
+
+def header(text: str) -> None:
+    print()
+    print("=" * W)
+    print(f"  {text}")
+    print("=" * W)
+
+def show_state(state: State) -> None:
+    parts = "  ".join(f"{k}={v}" for k, v in sorted(state.values.items()))
+    print(f"\n  [ State ]  {parts}\n")
+
+def rule(text: str = "") -> None:
+    if text:
+        print(f"  {'-' * (W - 2)}")
+        print(f"  {text}")
+    else:
+        print(f"  {'-' * (W - 2)}")
+
+# ---------------------------------------------------------------------------
+# Instrumented Cathedral that prints the story as it runs
+# ---------------------------------------------------------------------------
+
+class StorytellerCathedral(Cathedral):
+
     async def step(self, goal: str, token: AuthToken) -> ValidationEvent:
         delay = self.retry.base_delay
+        last_event: ValidationEvent | None = None
 
         for attempt in range(1, self.retry.max_attempts + 1):
             proposal = await self.agent.propose(goal)
-
-            from trustlayer.engine import parse_action
             action = parse_action(proposal)
 
             if not action:
-                print(f"  [REJECTED] unparseable proposal on attempt {attempt}")
+                print(f"  Attempt {attempt}: unparseable proposal")
                 last_event = ValidationEvent(
                     success=False,
                     description=goal,
                     failed_constraint="unparseable proposal",
                 )
             else:
+                value_display = f"{action.target} = {action.value}"
+                print(f"  Attempt {attempt}: Setting {value_display}")
+
                 update = Update(description=goal, actions=[action], token=token)
                 last_event = self.validator.validate_update(update)
 
                 if last_event.success:
-                    print(f"  [ACCEPTED] {goal} (attempt {attempt})")
+                    print(f"  ACCEPTED\n")
                     return last_event
                 else:
-                    print(f"  [REJECTED] {goal} | constraint: {last_event.failed_constraint}")
+                    print(f"  REJECTED: breaks constraint  {last_event.failed_constraint}\n")
 
             if attempt < self.retry.max_attempts:
-                print(f"  [RETRYING] attempt {attempt + 1} of {self.retry.max_attempts}...")
+                print("  Retrying...\n")
                 await asyncio.sleep(delay)
                 delay *= self.retry.backoff_factor
 
@@ -110,34 +137,36 @@ async def main() -> None:
     global _call
     _call = 0
 
-    print()
-    print("=" * 52)
-    print("  TrustLayer v2.0  --  Validation Demo")
-    print("=" * 52)
-
-    state = State(values={"score": 50, "mode": "normal"})
-    validator = Validator(state, [score_in_range, mode_not_restricted], SECRET)
+    state = State(values={"A": 10, "B": 20, "C": 10})
+    validator = Validator(state, [c_equals_b_plus_5], SECRET)
     token = AuthToken.issue(AuthorityLevel.SYSTEM, "demo-agent", ttl_seconds=60, secret=SECRET)
 
     agent = Agent(mock_model)
-    cathedral = LoggingCathedral(
+    cathedral = StorytellerCathedral(
         validator,
         agent,
         retry=RetryConfig(max_attempts=3, base_delay=0.05),
     )
 
-    print()
-    print(f"  Initial state : {state.values}")
-    print()
-
-    event = await cathedral.step("update the score", token)
+    header("TrustLayer v2.0  --  Validation Demo")
 
     print()
-    print(f"  Final state   : {state.values}")
+    print("  Rule:  C must always equal B + 5")
+    print("  Agent: will first break the rule, then fix it")
+
+    show_state(state)
+    rule()
     print()
-    print("=" * 52)
-    print(f"  Result: {'OK' if event.success else 'FAILED'}")
-    print("=" * 52)
+
+    event = await cathedral.step("update C", token)
+
+    rule()
+    show_state(state)
+
+    status = "PASSED" if event.success else "FAILED"
+    print(f"  Result: {status}")
+    print()
+    print("=" * W)
     print()
 
 
