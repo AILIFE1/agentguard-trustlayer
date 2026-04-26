@@ -1,24 +1,71 @@
 # TrustLayer
 
-**Deterministic validation engine for AI and autonomous systems.**
-
-TrustLayer wraps any async AI agent in a constraint layer that enforces rules
-on every state update — with signed authority tokens, atomic rollback, and
-exponential-backoff retry built in.
+**A deterministic validation layer for AI and autonomous systems.**
 
 ---
 
-## Key Features
+## The Problem
 
-- **Composable constraints** — combine rules with `&`, `|`, `~` operators
-- **Atomic rollback** — state is never partially updated on failure
-- **Signed tokens** — HMAC-SHA256 authority tokens with TTL expiry
-- **Retry strategies** — configurable backoff for transient failures
+AI agents make decisions — but decisions are not always safe to execute.
+
+Without a validation layer, an agent can:
+- Write invalid state
+- Bypass access controls
+- Make irreversible changes without authorisation
+
+TrustLayer solves this by **separating decision-making (AI) from execution (validated system).**
+
+The agent proposes. TrustLayer decides whether to allow it.
+
+---
+
+## How It Works
+
+```
+AI Agent  -->  Proposal  -->  TrustLayer  -->  Execution
+                                  ^
+                             Constraints
+                          (rules you define)
+```
+
+Every update goes through:
+
+1. **Auth check** — is the token valid and in-date?
+2. **Lock check** — is the target key frozen?
+3. **Constraint check** — does the new state pass all rules?
+4. **Rollback** — if any check fails, state is restored automatically
+
+---
+
+## Features
+
+- **Constraint-based validation** — define rules as Python callables
+- **Composable logic** — combine constraints with `&`, `|`, `~`
+- **Authenticated authority** — HMAC-signed tokens with TTL expiry
+- **Safe state updates** — atomic rollback on any failure
+- **Async agent loop** — built-in retry with exponential backoff
+- **Audit trail** — every validation returns a `ValidationEvent` with the failure reason
 - **Zero dependencies** — standard library only
 
 ---
 
 ## Quick Start
+
+```bash
+python examples/demo.py
+```
+
+### Example output
+
+```
+[REJECTED] set score to 9999     | constraint: score_in_range
+[RETRYING] attempt 2 of 3...
+[ACCEPTED] set a valid score     | score: 50 -> 42
+```
+
+---
+
+## Code Example
 
 ```python
 import asyncio
@@ -30,12 +77,17 @@ from trustlayer import (
 
 SECRET = b"my-secret"
 
+# Define constraints
 score_ok = LambdaConstraint("score_ok", lambda v: 0 <= v.get("score", 0) <= 100)
 
+# Set up state and validator
 state = State(values={"score": 50})
 validator = Validator(state, [score_ok], SECRET)
+
+# Issue an authority token
 token = AuthToken.issue(AuthorityLevel.SYSTEM, "my-agent", ttl_seconds=60, secret=SECRET)
 
+# Wire up an async model
 async def my_model(prompt: str) -> str:
     return json.dumps({"type": "update", "target": "score", "value": 75})
 
@@ -50,33 +102,19 @@ asyncio.run(main())
 
 ---
 
-## Running the Demo
-
-```bash
-python examples/demo.py
-```
-
-The demo exercises four scenarios:
-1. Direct update that violates a constraint (rejected, state rolled back)
-2. Agent that proposes a bad value then a valid one (retry succeeds on attempt 2)
-3. Attempt to modify a locked key (blocked)
-4. Expired token (rejected before any state change)
-
----
-
 ## Project Structure
 
 ```
 trustlayer/
 ├── trustlayer/
-│   ├── __init__.py      # Public API + logging setup
-│   ├── auth.py          # AuthToken, AuthorityLevel
-│   ├── constraints.py   # Constraint, LambdaConstraint, And/Or/Not
-│   ├── types.py         # State, Action, Update
-│   ├── validator.py     # Validator, ValidationEvent
-│   └── engine.py        # Agent, Cathedral, RetryConfig
+│   ├── __init__.py       # Public API + logging setup
+│   ├── auth.py           # AuthToken, AuthorityLevel
+│   ├── constraints.py    # Constraint, LambdaConstraint, And/Or/Not
+│   ├── types.py          # State, Action, Update
+│   ├── validator.py      # Validator, ValidationEvent
+│   └── engine.py         # Agent, Cathedral, RetryConfig
 └── examples/
-    └── demo.py
+    └── demo.py           # Runnable walkthrough
 ```
 
 ---
