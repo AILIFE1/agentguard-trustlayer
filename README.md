@@ -94,7 +94,16 @@ The agent retries with a valid update, and the system remains stable.
 
 ## Quick Start
 
+Install:
+
 ```bash
+pip install trustlayer-py
+```
+
+Or run the demo directly:
+
+```bash
+git clone https://github.com/AILIFE1/trustlayer
 python examples/demo.py
 ```
 
