@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict
+import inspect
+from typing import Any, Callable, Dict, Optional
 
 
 class Constraint:
@@ -12,7 +13,7 @@ class Constraint:
         self.name = name
         self.priority = priority
 
-    def check(self, values: Dict[str, Any]) -> bool:
+    def check(self, values: Dict[str, Any], original: Optional[Dict[str, Any]] = None) -> bool:
         raise NotImplementedError
 
     def __and__(self, other: "Constraint") -> "Constraint":
@@ -26,18 +27,28 @@ class Constraint:
 
 
 class LambdaConstraint(Constraint):
-    """Constraint backed by an arbitrary callable."""
+    """Constraint backed by an arbitrary callable.
+
+    Accepts both single-arg ``fn(values)`` and two-arg ``fn(values, original)``
+    callables — arity is detected at construction time.
+    """
 
     def __init__(
         self,
         name: str,
-        fn: Callable[[Dict[str, Any]], bool],
+        fn: Callable,
         priority: int = 100,
     ):
         super().__init__(name, priority)
         self.fn = fn
+        try:
+            self._two_arg = len(inspect.signature(fn).parameters) >= 2
+        except (ValueError, TypeError):
+            self._two_arg = False
 
-    def check(self, values: Dict[str, Any]) -> bool:
+    def check(self, values: Dict[str, Any], original: Optional[Dict[str, Any]] = None) -> bool:
+        if self._two_arg:
+            return self.fn(values, original)
         return self.fn(values)
 
 
@@ -46,8 +57,8 @@ class AndConstraint(Constraint):
         super().__init__(f"{a.name} AND {b.name}", min(a.priority, b.priority))
         self.a, self.b = a, b
 
-    def check(self, values: Dict[str, Any]) -> bool:
-        return self.a.check(values) and self.b.check(values)
+    def check(self, values: Dict[str, Any], original: Optional[Dict[str, Any]] = None) -> bool:
+        return self.a.check(values, original) and self.b.check(values, original)
 
 
 class OrConstraint(Constraint):
@@ -55,8 +66,8 @@ class OrConstraint(Constraint):
         super().__init__(f"{a.name} OR {b.name}", min(a.priority, b.priority))
         self.a, self.b = a, b
 
-    def check(self, values: Dict[str, Any]) -> bool:
-        return self.a.check(values) or self.b.check(values)
+    def check(self, values: Dict[str, Any], original: Optional[Dict[str, Any]] = None) -> bool:
+        return self.a.check(values, original) or self.b.check(values, original)
 
 
 class NotConstraint(Constraint):
@@ -64,5 +75,5 @@ class NotConstraint(Constraint):
         super().__init__(f"NOT {inner.name}", inner.priority)
         self.inner = inner
 
-    def check(self, values: Dict[str, Any]) -> bool:
-        return not self.inner.check(values)
+    def check(self, values: Dict[str, Any], original: Optional[Dict[str, Any]] = None) -> bool:
+        return not self.inner.check(values, original)

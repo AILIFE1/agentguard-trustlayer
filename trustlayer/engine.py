@@ -1,15 +1,17 @@
-"""Agent loop, retry strategies, and Cathedral orchestrator."""
+"""Agent loop, retry strategies, Cathedral orchestrator, and GuardedAgent API."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import secrets as _secrets
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from trustlayer.auth import AuthToken
-from trustlayer.types import Action, Update
+from trustlayer.auth import AuthorityLevel, AuthToken
+from trustlayer.constraints import Constraint
+from trustlayer.types import Action, State, Update
 from trustlayer.validator import ValidationEvent, Validator
 
 logger = logging.getLogger("trustlayer.engine")
@@ -49,7 +51,9 @@ class Cathedral:
     """Orchestrates an Agent against a Validator with optional retry.
 
     Each call to `step` proposes one action from the agent, validates it,
-    and retries up to `retry.max_attempts` times on failure.
+    and retries up to `retry.max_attempts` times on failure.  The reason
+    for the last failure is appended to the prompt on each retry so the
+    model can self-correct.
     """
 
     def __init__(
@@ -68,24 +72,28 @@ class Cathedral:
         Returns the final ValidationEvent (success or last failure).
         """
         last_event: Optional[ValidationEvent] = None
+        last_error = ""
         delay = self.retry.base_delay
 
         for attempt in range(1, self.retry.max_attempts + 1):
             logger.debug("Attempt %d/%d for goal: %s", attempt, self.retry.max_attempts, goal)
 
-            proposal = await self.agent.propose(goal)
+            prompt = f"{goal}\nLast error: {last_error}" if last_error else goal
+            proposal = await self.agent.propose(prompt)
             action = parse_action(proposal)
 
             if not action:
                 logger.warning("Attempt %d: unparseable proposal", attempt)
+                last_error = "unparseable proposal"
                 last_event = ValidationEvent(
                     success=False,
                     description=goal,
-                    failed_constraint="unparseable proposal",
+                    failed_constraint=last_error,
                 )
             else:
                 update = Update(description=goal, actions=[action], token=token)
                 last_event = self.validator.validate_update(update)
+                last_error = last_event.failed_constraint or ""
                 logger.info("Attempt %d: %s", attempt, last_event)
 
             if last_event.success:
@@ -96,3 +104,49 @@ class Cathedral:
                 delay *= self.retry.backoff_factor
 
         return last_event  # type: ignore[return-value]
+
+
+class GuardedAgent:
+    """High-level API: bundles State, Validator, Agent, and Cathedral into one object.
+
+    Example::
+
+        agent = GuardedAgent(
+            model=my_async_llm,
+            rules=[LambdaConstraint("balance <= 1000", lambda v: v["balance"] <= 1000)],
+            initial_state={"balance": 100},
+        )
+        result = await agent.run("Set balance to 500")
+    """
+
+    def __init__(
+        self,
+        model: AsyncModel,
+        rules: List[Constraint],
+        initial_state: Dict[str, Any],
+        ttl_seconds: int = 3600,
+        retry: Optional[RetryConfig] = None,
+    ):
+        self._secret = _secrets.token_bytes(32)
+        self.state = State(initial_state)
+        self.validator = Validator(self.state, rules, self._secret)
+        self.agent = Agent(model)
+        self.engine = Cathedral(self.validator, self.agent, retry=retry)
+        self.token = AuthToken.issue(
+            AuthorityLevel.USER, "agent", ttl_seconds, self._secret
+        )
+
+    async def run(self, goal: str) -> Dict[str, Any]:
+        """Run *goal* and return a result dict with status, state, and audit hash."""
+        event = await self.engine.step(goal, self.token)
+        if event.success:
+            return {
+                "status": "success",
+                "state": self.state.values,
+                "audit": event.audit_hash,
+            }
+        return {
+            "status": "blocked",
+            "reason": event.failed_constraint,
+            "state": self.state.values,
+        }

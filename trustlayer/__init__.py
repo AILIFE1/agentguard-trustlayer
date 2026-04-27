@@ -15,7 +15,7 @@ from trustlayer.constraints import (
     NotConstraint,
     OrConstraint,
 )
-from trustlayer.engine import Agent, AsyncModel, Cathedral, RetryConfig, parse_action
+from trustlayer.engine import Agent, AsyncModel, Cathedral, GuardedAgent, RetryConfig, parse_action
 from trustlayer.types import Action, State, Update
 from trustlayer.validator import ValidationEvent, Validator
 
@@ -35,8 +35,9 @@ __all__ = [
     "Agent",
     "AsyncModel",
     "Cathedral",
+    "GuardedAgent",
     "RetryConfig",
     "parse_action",
 ]
 
-__version__ = "2.0.0"
+__version__ = "3.2.0"

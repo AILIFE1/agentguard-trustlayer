@@ -15,6 +15,9 @@ class State:
     values: Dict[str, Any]
     locks: Dict[str, bool] = field(default_factory=dict)
 
+    def is_locked(self, key: str) -> bool:
+        return self.locks.get(key, False)
+
 
 @dataclass
 class Action:
