@@ -1,5 +1,7 @@
 # agentguard-trustlayer
 
+> **AgentGuard-TrustLayer is a runtime safety layer that prevents AI agents from taking invalid or unsafe actions—even when they try.**
+
 Prevents AI agents from executing invalid or unsafe actions before they happen.
 
 ---
