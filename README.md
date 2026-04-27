@@ -1,4 +1,4 @@
-# TrustLayer
+# agentguard-trustlayer
 
 Prevents AI agents from executing invalid or unsafe actions before they happen.
 
@@ -15,7 +15,7 @@ Without a validation layer:
 - corrupt system state
 - execute invalid operations
 
-TrustLayer sits between AI and execution.
+agentguard-trustlayer sits between AI and execution.
 
 It ensures:
 - every action is checked
@@ -26,7 +26,7 @@ It ensures:
 
 ## Core Idea
 
-TrustLayer separates:
+agentguard-trustlayer separates:
 
 **decision-making (AI)**
 from
@@ -51,34 +51,16 @@ Every update passes through four gates:
 
 ---
 
-## Example: Preventing Bad AI Actions
-
-An AI agent attempts:
-
-```
-C = 100
-```
-
-But the system enforces:
-
-```
-C = B + 5
-```
-
-TrustLayer rejects the action before it can corrupt the system.
-
-The agent retries with a valid update, and the system remains stable.
-
----
-
 ## Features
 
-- Constraint-based validation
+- Constraint-based validation with composable logic (`&`, `|`, `~`)
+- Delta-aware constraints — rules can compare proposed vs original state
 - Authenticated authority (HMAC-signed tokens with TTL)
 - Safe state updates with automatic rollback
-- Composable logic (`&`, `|`, `~` operators)
-- Async agent loop with retry and backoff
-- Full audit trail via `ValidationEvent`
+- `set`, `increment`, and `update` action types
+- Async agent loop with retry, backoff, and error feedback to model
+- Tamper-evident audit chain — every `ValidationEvent` carries a SHA-256 hash linked to the previous event
+- `GuardedAgent` high-level API — one object, one call
 - Zero dependencies (standard library only)
 
 ---
@@ -87,8 +69,8 @@ The agent retries with a valid update, and the system remains stable.
 
 - Prevent AI agents from breaking business rules
 - Enforce invariants in automated systems
-- Add safety layer to LLM workflows
-- Control multi-agent environments with authority
+- Add a safety layer to LLM workflows
+- Control multi-agent environments with authority levels
 
 ---
 
@@ -100,32 +82,65 @@ Install:
 pip install trustlayer-py
 ```
 
-Or run the demo directly:
+Or clone and run a demo:
 
 ```bash
-git clone https://github.com/AILIFE1/trustlayer
+git clone https://github.com/AILIFE1/agentguard-trustlayer
+cd agentguard-trustlayer
 python examples/demo.py
 ```
 
 ---
 
-## Example Output
+## 🔥 Try to break the agent
+
+```bash
+python examples/demo_break_the_agent.py
+```
+
+An agent tries to set `balance = 1,000,000`. TrustLayer blocks it. The error is fed back into the prompt. The agent self-corrects and increments safely instead.
 
 ```
---- Agent Attempt 1 ---
-Goal: Force C = 100
-REJECTED: Would break constraint (C must equal B + 5)
-System prevented invalid state.
+[MODEL OUTPUT] Attempting INVALID action...
 
---- Agent Attempt 2 ---
-Adjusting strategy...
-ACCEPTED: State remains consistent
-Final State: {'A': 10, 'B': 20, 'C': 25}
+[MODEL INPUT]
+Increase balance as much as possible
+Last error: balance <= max_limit
+
+[MODEL OUTPUT] Attempting SAFE action...
+
+FINAL STATE
+{'balance': 110, 'max_limit': 200}
+
+RESULT
+[OK] Increase balance as much as possible
 ```
 
 ---
 
-## Code Example
+## GuardedAgent — one-liner setup
+
+```python
+import asyncio, json
+from trustlayer import GuardedAgent, LambdaConstraint
+
+async def my_model(prompt: str) -> str:
+    return json.dumps({"type": "set", "target": "score", "value": 75})
+
+agent = GuardedAgent(
+    model=my_model,
+    rules=[LambdaConstraint("score 0-100", lambda v: 0 <= v.get("score", 0) <= 100)],
+    initial_state={"score": 50},
+)
+
+result = asyncio.run(agent.run("raise the score"))
+print(result)
+# {'status': 'success', 'state': {'score': 75}, 'audit': '<sha256>'}
+```
+
+---
+
+## Full API example
 
 ```python
 import asyncio, json
@@ -143,13 +158,14 @@ validator = Validator(state, [score_ok], SECRET)
 token     = AuthToken.issue(AuthorityLevel.SYSTEM, "agent", ttl_seconds=60, secret=SECRET)
 
 async def model(prompt: str) -> str:
-    return json.dumps({"type": "update", "target": "score", "value": 75})
+    return json.dumps({"type": "set", "target": "score", "value": 75})
 
 async def main():
     cathedral = Cathedral(validator, Agent(model), retry=RetryConfig(max_attempts=3))
     event = await cathedral.step("raise the score", token)
-    print(event)          # [OK] raise the score
-    print(state.values)   # {'score': 75}
+    print(event)           # [OK] raise the score
+    print(event.audit_hash)  # sha256 chain link
+    print(state.values)    # {'score': 75}
 
 asyncio.run(main())
 ```
@@ -159,23 +175,24 @@ asyncio.run(main())
 ## Project Structure
 
 ```
-trustlayer/
+agentguard-trustlayer/
 ├── trustlayer/
 │   ├── __init__.py       # Public API + logging setup
 │   ├── auth.py           # AuthToken, AuthorityLevel
 │   ├── constraints.py    # Constraint, LambdaConstraint, And/Or/Not
 │   ├── types.py          # State, Action, Update
-│   ├── validator.py      # Validator, ValidationEvent
-│   └── engine.py         # Agent, Cathedral, RetryConfig
+│   ├── validator.py      # Validator, ValidationEvent, audit chain
+│   └── engine.py         # Agent, Cathedral, GuardedAgent, RetryConfig
 └── examples/
-    └── demo.py           # Runnable walkthrough
+    ├── demo.py                    # Basic walkthrough
+    └── demo_break_the_agent.py    # Constraint enforcement + self-correction
 ```
 
 ---
 
 ## Philosophy
 
-TrustLayer doesn't make decisions —
+agentguard-trustlayer doesn't make decisions —
 it decides whether decisions are *allowed*.
 
 ---
