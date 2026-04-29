@@ -35,3 +35,4 @@ class Update:
     description: str
     actions: List[Action]
     token: AuthToken
+    policy: str = "pessimistic"  # "pessimistic" | "optimistic"
