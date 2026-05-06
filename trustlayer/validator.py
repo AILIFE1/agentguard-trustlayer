@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from trustlayer.constraint_audit import ConstraintAudit
 from trustlayer.constraints import Constraint
 from trustlayer.types import Action, State, Update
 
@@ -61,6 +62,19 @@ class Validator:
         self.secret = secret
         self.verifier = verifier or Verifier()
         self._last_hash = "GENESIS"
+        self.constraint_audit = ConstraintAudit(self.constraints)
+
+    def update_constraints(self, new_constraints: List[Constraint], label: str = "") -> str:
+        """Replace the active constraint set and record the change in the audit chain.
+
+        Returns the new constraint hash.
+        """
+        self.constraints = sorted(new_constraints, key=lambda c: c.priority)
+        return self.constraint_audit.record(self.constraints, label=label)
+
+    def constraint_drift(self) -> dict:
+        """Return drift metrics for the constraint set since baseline."""
+        return self.constraint_audit.drift()
 
     def _compute_hash(self, description: str, success: bool) -> str:
         payload = json.dumps(

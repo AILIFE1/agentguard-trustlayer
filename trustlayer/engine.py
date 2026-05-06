@@ -150,3 +150,26 @@ class GuardedAgent:
             "reason": event.failed_constraint,
             "state": self.state.values,
         }
+
+    def update_rules(self, new_rules: List[Constraint], label: str = "") -> str:
+        """Replace the active constraint set. Returns the new constraint hash.
+
+        The change is recorded in the constraint audit chain — call
+        ``constraint_drift()`` to see how far the rule-set has evolved
+        from the original baseline.
+        """
+        return self.validator.update_constraints(new_rules, label=label)
+
+    def constraint_drift(self) -> Dict[str, Any]:
+        """Return drift metrics for the constraint set since it was first created.
+
+        Keys:
+            divergence_from_baseline  float 0–1 (0 = unchanged)
+            trend                     "stable" | "changed" | "permissive_drift"
+            removed_constraints       constraints present at baseline but gone now
+            added_constraints         new constraints not in baseline
+            baseline_count / current_count
+            baseline_hash / current_hash  (first 16 chars of SHA-256)
+            snapshots                 total number of recorded states
+        """
+        return self.validator.constraint_drift()

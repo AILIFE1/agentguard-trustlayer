@@ -8,6 +8,7 @@ logging.basicConfig(
 )
 
 from trustlayer.auth import AuthorityLevel, AuthToken
+from trustlayer.constraint_audit import ConstraintAudit
 from trustlayer.constraints import (
     AndConstraint,
     Constraint,
@@ -22,6 +23,7 @@ from trustlayer.validator import ValidationEvent, Validator
 __all__ = [
     "AuthorityLevel",
     "AuthToken",
+    "ConstraintAudit",
     "Constraint",
     "LambdaConstraint",
     "AndConstraint",
@@ -40,4 +42,4 @@ __all__ = [
     "parse_action",
 ]
 
-__version__ = "3.2.0"
+__version__ = "2.1.0"
