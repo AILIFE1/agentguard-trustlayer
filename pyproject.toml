@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trustlayer-py"
-version = "2.0.0"
+version = "2.0.1"
 description = "Deterministic validation layer for AI agents and autonomous systems"
 readme = "README.md"
 license = { text = "MIT" }
@@ -25,8 +25,8 @@ classifiers = [
 requires-python = ">=3.9"
 
 [project.urls]
-Homepage = "https://github.com/AILIFE1/trustlayer"
-Repository = "https://github.com/AILIFE1/trustlayer"
+Homepage = "https://github.com/AILIFE1/agentguard-trustlayer"
+Repository = "https://github.com/AILIFE1/agentguard-trustlayer"
 
 [tool.setuptools.packages.find]
 where = ["."]
