@@ -17,8 +17,9 @@ from trustlayer.constraints import (
     OrConstraint,
 )
 from trustlayer.engine import Agent, AsyncModel, Cathedral, GuardedAgent, RetryConfig, parse_action
-from trustlayer.types import Action, State, Update
+from trustlayer.types import Action, ExternalCallConfig, GateDiagnostic, State, Update
 from trustlayer.validator import ValidationEvent, Validator
+from trustlayer.verifier import CathedralVerifier, HttpVerifier, ProvenanceVerifier
 
 __all__ = [
     "AuthorityLevel",
@@ -31,6 +32,8 @@ __all__ = [
     "NotConstraint",
     "State",
     "Action",
+    "ExternalCallConfig",
+    "GateDiagnostic",
     "Update",
     "ValidationEvent",
     "Validator",
@@ -40,6 +43,9 @@ __all__ = [
     "GuardedAgent",
     "RetryConfig",
     "parse_action",
+    "ProvenanceVerifier",
+    "HttpVerifier",
+    "CathedralVerifier",
 ]
 
-__version__ = "2.1.0"
+__version__ = "3.3.0"

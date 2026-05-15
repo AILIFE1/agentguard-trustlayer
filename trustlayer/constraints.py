@@ -9,9 +9,20 @@ from typing import Any, Callable, Dict, Optional
 class Constraint:
     """Base class for all state constraints."""
 
-    def __init__(self, name: str, priority: int = 100):
+    def __init__(
+        self,
+        name: str,
+        priority: int = 100,
+        *,
+        block: str = "",
+        author: str = "",
+        reason: str = "",
+    ):
         self.name = name
         self.priority = priority
+        self.block = block    # logical group, e.g. "identity", "resource", "scope"
+        self.author = author  # who defined this constraint
+        self.reason = reason  # why this constraint exists
 
     def check(self, values: Dict[str, Any], original: Optional[Dict[str, Any]] = None) -> bool:
         raise NotImplementedError
@@ -38,8 +49,12 @@ class LambdaConstraint(Constraint):
         name: str,
         fn: Callable,
         priority: int = 100,
+        *,
+        block: str = "",
+        author: str = "",
+        reason: str = "",
     ):
-        super().__init__(name, priority)
+        super().__init__(name, priority, block=block, author=author, reason=reason)
         self.fn = fn
         try:
             self._two_arg = len(inspect.signature(fn).parameters) >= 2

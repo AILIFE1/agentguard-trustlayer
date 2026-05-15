@@ -7,11 +7,11 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from trustlayer.constraint_audit import ConstraintAudit
 from trustlayer.constraints import Constraint
-from trustlayer.types import Action, State, Update
+from trustlayer.types import Action, GateDiagnostic, State, Update
 
 logger = logging.getLogger("trustlayer.validator")
 
@@ -35,6 +35,7 @@ class ValidationEvent:
     timestamp: float = field(default_factory=time.time)
     audit_hash: str = ""
     prev_hash: str = ""
+    diagnostics: List[GateDiagnostic] = field(default_factory=list)
 
     def __str__(self) -> str:
         if self.success:
@@ -77,6 +78,13 @@ class Validator:
         return self.constraint_audit.drift()
 
     def _compute_hash(self, description: str, success: bool) -> str:
+        import dataclasses
+
+        def _default(obj):
+            if dataclasses.is_dataclass(obj):
+                return dataclasses.asdict(obj)
+            return str(obj)
+
         payload = json.dumps(
             {
                 "desc": description,
@@ -86,11 +94,36 @@ class Validator:
                 "ts": time.time(),
             },
             sort_keys=True,
+            default=_default,
         ).encode()
         return hashlib.sha256(payload).hexdigest()
 
     def _all_violations(self, snapshot: Optional[dict] = None) -> List[str]:
         return [c.name for c in self.constraints if not c.check(self.state.values, snapshot)]
+
+    def _all_violations_with_diag(
+        self,
+        snapshot: Optional[dict] = None,
+        action: Optional[Action] = None,
+    ) -> Tuple[List[str], List[GateDiagnostic]]:
+        failed_names: List[str] = []
+        diagnostics: List[GateDiagnostic] = []
+        for c in self.constraints:
+            if not c.check(self.state.values, snapshot):
+                failed_names.append(c.name)
+                diagnostics.append(GateDiagnostic(
+                    constraint_name=c.name,
+                    block=getattr(c, "block", ""),
+                    action_type=action.type if action else "",
+                    target_key=action.target if action else "",
+                    current_value=(
+                        self.state.values.get(action.target)
+                        if action else None
+                    ),
+                    author=getattr(c, "author", ""),
+                    reason=getattr(c, "reason", ""),
+                ))
+        return failed_names, diagnostics
 
     def _make_event(
         self,
@@ -98,6 +131,7 @@ class Validator:
         description: str,
         failed: List[str],
         action: str = "",
+        diagnostics: Optional[List[GateDiagnostic]] = None,
     ) -> ValidationEvent:
         h = self._compute_hash(description, success)
         event = ValidationEvent(
@@ -109,6 +143,7 @@ class Validator:
             timestamp=time.time(),
             audit_hash=h,
             prev_hash=self._last_hash,
+            diagnostics=diagnostics or [],
         )
         self._last_hash = h
         logger.info(str(event))
@@ -160,9 +195,14 @@ class Validator:
         if policy == "pessimistic":
             self.state.values = target
 
-        failed = self._all_violations(snapshot)
+        last_action = update.actions[-1] if update.actions else None
+        failed, diagnostics = self._all_violations_with_diag(snapshot, last_action)
         if failed:
             self.state.values = snapshot
-            return self._make_event(False, update.description, failed)
+            return self._make_event(
+                False, update.description, failed,
+                last_action.type if last_action else "",
+                diagnostics,
+            )
 
         return self._make_event(True, update.description, [])
